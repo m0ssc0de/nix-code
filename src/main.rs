@@ -38,10 +38,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let work_dir = cli.path;
     let nix_file = cli.file;
-    let nix_tag = match cli.tag {
-        Some(nix_tag) => Some(nix_tag),
-        None => tags::get_tag(work_dir.as_path()),
-    };
+    let nix_tag = cli.tag;
 
     let nix_file_by_tag = match nix_tag {
         Some(nix_tag) => files::find_nix_file(Path::new(
@@ -56,20 +53,30 @@ fn main() -> Result<(), Box<dyn Error>> {
         )),
         None => None,
     };
-    let nix_file_in_work_dir = files::find_nix_file(&work_dir);
-    let nix_file = match nix_file {
-        Some(nix_file) => Path::new(&nix_file).to_path_buf(),
-        None => match nix_file_by_tag {
-            Some(nix_file) => nix_file,
-            None => match nix_file_in_work_dir {
-                Some(nix_file) => nix_file,
-                None => {
-                    eprintln!("No nix file found in the work directory");
-                    return Ok(());
-                }
-            },
-        },
+    let nix_file_by_tag_from_work_dir = match tags::get_tag(work_dir.as_path()) {
+        Some(nix_tag) => files::find_nix_file(Path::new(
+            format!(
+                "{}/{}/{}/{}",
+                home_dir,
+                home::NIX_CODE_DIR,
+                home::INDEX_DIR,
+                nix_tag
+            )
+            .as_str(),
+        )),
+        None => None,
     };
+    let nix_file_in_work_dir = files::find_nix_file(&work_dir);
+    let nix_file = nix_file
+        .map(|s: PathBuf| s)
+        .or_else(|| nix_file_by_tag)
+        .or_else(|| nix_file_in_work_dir)
+        .or_else(|| nix_file_by_tag_from_work_dir)
+        .ok_or_else(|| {
+            eprintln!("No nix file found in the work directory");
+            std::process::exit(1);
+        })
+        .unwrap();
 
     let script = format!(
         r#"nix-shell {} --run "code {}""#,
