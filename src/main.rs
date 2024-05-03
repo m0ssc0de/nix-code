@@ -1,113 +1,74 @@
-use std::env;
+use clap::Parser;
 use std::error::Error;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use url::Url;
+mod files;
+mod home;
+mod tags;
+
+#[derive(Parser)]
+#[command(version, about, long_about = None)]
+struct Cli {
+    /// Path to operate on
+    ///
+    /// This can be a directory or a file that will be opened in vscode. If it's a directory, the program may search for a ".nix" file in it to set up the development environment. If no ".nix" file is found, the program will search our nix file index using a "tag" derived from its git remote. For example, if the git remote is "git@github.com:rust-lang/cargo.git", the tag will be "github.com/rust-lang/cargo".
+    #[arg(default_value = ".", value_name = "PATH")]
+    path: PathBuf,
+
+    /// Sets a custom nix file
+    ///
+    /// This should be the path to a nix file, like "./shell.nix". Its priority is higher than the nix file in path.
+    #[arg(short, long, value_name = "NIX FILE")]
+    file: Option<PathBuf>,
+
+    /// Sets a custom nix file tag
+    ///
+    /// This tag is used to identify the nix file in a more user-friendly way. It's used to search for a nix file in our nix file index. "NIX FILE" and "NIX FILE TAG" cannot be set at the same time. Its priority is higher than the nix file in path.
+    ///
+    /// You can directly set the tag to search in the index for projects of the same type that already have nix files, such as "github.com/NixOS/nix".
+    /// Or set the tag like "rust" to use a predefined nix file for a specific type of project.
+    #[arg(short, long, value_name = "NIX FILE TAG")]
+    tag: Option<String>,
+}
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let args: Vec<String> = env::args().collect();
-    let current_dir = env::current_dir()?;
+    home::init()?;
+    let home_dir = std::env::var("HOME").unwrap_or_else(|_| "".to_string());
+    let cli = Cli::parse();
 
-    let (nix_file, work_dir) = match args.len() {
-        1 => (None, current_dir),
-        2 => {
-            let arg1 = &args[1];
-            let path = Path::new(arg1);
-            if path.is_file() && path.extension().map_or(false, |ext| ext == "nix") {
-                (Some(arg1), current_dir)
-            } else {
-                (None, path.to_path_buf())
-            }
-        }
-        3 => (Some(&args[1]), Path::new(&args[2]).to_path_buf()),
-        _ => return Err("Invalid number of arguments. Expected 0, 1 or 2.".into()),
+    let work_dir = cli.path;
+    let nix_file = cli.file;
+    let nix_tag = match cli.tag {
+        Some(nix_tag) => Some(nix_tag),
+        None => tags::get_tag(work_dir.as_path()),
     };
-    if args.len() > 3 {
-        return Err("Invalid number of arguments. Expected 0, 1 or 2.".into());
-    }
 
-    let git_remote = gix_config::File::from_git_dir(work_dir.clone().join(".git"))
-        .ok()
-        .and_then(|g| {
-            g.strings_by_key("remote.origin.url")
-                .and_then(|vec| vec.first().map(|s| s.to_string()))
-        });
-    println!("Git Remote: {:?}", git_remote);
-    if let Some(remote_url) = git_remote {
-        let github_remote_name = match Url::parse(&remote_url) {
-            Ok(url) => {
-                let host = url.host_str().unwrap().to_string();
-                let mut path_segments = url.path_segments().unwrap();
-                let repo_name = path_segments.next_back().unwrap();
-                let username = path_segments.next_back().unwrap();
-                format!(
-                    "url {}/{}/{}",
-                    host,
-                    username,
-                    repo_name.trim_end_matches(".git")
-                )
-            }
-            Err(_) => {
-                if remote_url.starts_with("git@") {
-                    let host = remote_url
-                        .split(':')
-                        .nth(0)
-                        .unwrap_or("")
-                        .trim_start_matches("git@");
-                    let path = remote_url.split(':').nth(1).unwrap_or("");
-                    let mut path_segments = path.split('/');
-                    let username = path_segments.next().unwrap_or("");
-                    let repo_name = path_segments.next().unwrap_or("").trim_end_matches(".git");
-                    format!("git {}/{}/{}", host, username, repo_name)
-                } else {
-                    String::new()
-                }
-            }
-        };
-        println!("GitHub Remote Name: {}", github_remote_name);
-    }
-
+    let nix_file_by_tag = match nix_tag {
+        Some(nix_tag) => files::find_nix_file(Path::new(
+            format!(
+                "{}/{}/{}/{}",
+                home_dir,
+                home::NIX_CODE_DIR,
+                home::INDEX_DIR,
+                nix_tag
+            )
+            .as_str(),
+        )),
+        None => None,
+    };
+    let nix_file_in_work_dir = files::find_nix_file(&work_dir);
     let nix_file = match nix_file {
-        Some(nix_file) => Path::new(nix_file).to_path_buf(),
-        None => {
-            let mut nix_files = work_dir
-                .read_dir()?
-                .filter_map(|entry| {
-                    entry.ok().and_then(|entry| {
-                        let path = entry.path();
-                        if path.is_file() && path.extension().map_or(false, |ext| ext == "nix") {
-                            Some(path)
-                        } else {
-                            None
-                        }
-                    })
-                })
-                .collect::<Vec<_>>();
-
-            // Sort nix_files so that shell.nix comes first, then default.nix, then others
-            nix_files.sort_by(|a, b| {
-                let a_str = a.file_name().unwrap().to_str().unwrap();
-                let b_str = b.file_name().unwrap().to_str().unwrap();
-
-                if a_str == "shell.nix" {
-                    std::cmp::Ordering::Less
-                } else if b_str == "shell.nix" {
-                    std::cmp::Ordering::Greater
-                } else if a_str == "default.nix" {
-                    std::cmp::Ordering::Less
-                } else if b_str == "default.nix" {
-                    std::cmp::Ordering::Greater
-                } else {
-                    a_str.cmp(b_str)
+        Some(nix_file) => Path::new(&nix_file).to_path_buf(),
+        None => match nix_file_by_tag {
+            Some(nix_file) => nix_file,
+            None => match nix_file_in_work_dir {
+                Some(nix_file) => nix_file,
+                None => {
+                    eprintln!("No nix file found in the work directory");
+                    return Ok(());
                 }
-            });
-
-            // Choose the first nix file, or return an error if there are none
-            nix_files
-                .first()
-                .ok_or("No .nix files found in the directory {}")?
-                .to_path_buf()
-        }
+            },
+        },
     };
 
     let script = format!(
