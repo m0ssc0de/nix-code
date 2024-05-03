@@ -27,7 +27,9 @@ Or install nix-code by nix(coming soon)
 
 To open a folder with a specific tag, use the `ncd` command followed by the path to the folder and the `-t` option with the tag. For instance, to open a folder with the "rust" tag, use the following command:
 
-`ncd ./projects/tryrust -t rust`
+```shell
+ncd ./projects/tryrust -t rust
+```
 
 This command will create a universal Nix shell tailored for a Rust development environment.
 
@@ -35,7 +37,10 @@ This command will create a universal Nix shell tailored for a Rust development e
 
 To open a Git repository cloned from GitHub, use the `ncd` command followed by the path to the repository. For example, to open the `kubernetes` project, use the following command:
 
-`ncd ~/project/kubernetes`
+```shell
+git clone --depth=1 https://github.com/kubernetes/kubernetes.git ~/project/kubernetes
+ncd ~/project/kubernetes
+```
 
 This command will search the [Nix code index](https://github.com/m0ssc0de/nix-code-index) and create a specific Nix shell optimized for the Kubernetes development environment.
 
