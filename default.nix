@@ -23,6 +23,7 @@ pkgs.mkShell {
     cargo
     rust-analyzer
     cmake
+    pkg-config
   ]);
   RUST_BACKTRACE = 1;
 }

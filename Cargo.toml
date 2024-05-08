@@ -7,6 +7,12 @@ license = "MIT"
 [[bin]]
 name = "ncd"
 path = "src/main.rs"
+[[bin]]
+name = "npath"
+path = "src/npath/main.rs"
+[[bin]]
+name = "scd"
+path = "src/scd/main.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -19,3 +25,8 @@ tar = "0.4.37"
 tokio = { version = "1", features = ["full"] }
 flate2 = "1.0.30"
 chrono = "0.4.38"
+dirs = "5.0.1"
+ssh2 = "0.9.4"
+ssh2-config = "0.2.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "0.8"
