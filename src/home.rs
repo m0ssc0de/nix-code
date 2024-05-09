@@ -6,6 +6,7 @@ use std::fs::File;
 use std::io::BufWriter;
 use std::io::Write;
 use std::path::Path;
+use std::process::Command;
 use tar::Archive;
 
 const LATEST_INDEX_URL: &str =
@@ -15,6 +16,19 @@ pub const INDEX_DIR: &str = "nix-code-index-main";
 const TMP_TAR: &str = "/tmp/repo2.tar.gz";
 
 pub fn init() -> std::io::Result<()> {
+    let output = Command::new("sh")
+        .arg("-c")
+        .arg("which nix")
+        .output()
+        .expect("failed to execute process");
+    if !output.status.success() {
+        eprintln!("Nix is not installed, please install nix by running:\n sh <(curl -L https://nixos.org/nix/install)");
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "Nix is not installed",
+        ));
+    }
+
     let home_dir = env::var("HOME").expect("HOME directory not set");
     let nix_code_dir = Path::new(&home_dir).join(NIX_CODE_DIR);
     fs::create_dir_all(&nix_code_dir)?;

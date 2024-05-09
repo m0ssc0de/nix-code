@@ -5,7 +5,7 @@ use clap::Parser;
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
 struct Cli {
-    #[arg(value_name = "SSH HOST")]
+    #[arg(short, long, value_name = "SSH HOST")]
     ssh_host: String,
 
     #[arg(value_name = "PATH TO OPEN with VSCode")]

@@ -243,7 +243,6 @@ fn connect_ssh_with_private_key(
 const TEMPLATE: &str = r#"# Define the function for completion
 _ssh_path_() {
     local -a options
-    local subcmd=${words[{HOSTS_LEVEL}]}
 
     # Define an associative array for subcommands and their corresponding directory strings
     typeset -A subcmds
@@ -251,16 +250,18 @@ _ssh_path_() {
         {HOSTS}
     )
 
-    # If no subcommand is provided, suggest the subcommands
-    if [[ -z $subcmd ]]; then
+    local last_2=${words[-2]}
+    local last_3=${words[-3]}
+
+    if [[ $last_2 == "-s" || $last_2 == "--ssh-host" ]]; then
         options=("{PATHS}")
-    else
-        # If a subcommand is provided, suggest the corresponding directory strings
-        options=(${=subcmds[$subcmd]})
+    elif [[ $last_3 == "-s" || $last_3 == "--ssh-host" ]]; then
+        options=(${=subcmds[$last_2]})
     fi
 
     _describe 'values' options
 }
 
 # Associate the function with your command using compdef
-compdef _ssh_path_ scd"#;
+compdef _ssh_path_ scd
+compdef _ssh_path_ ncd"#;

@@ -29,12 +29,43 @@ struct Cli {
     /// Or set the tag like "rust" to use a predefined nix file for a specific type of project.
     #[arg(short, long, value_name = "NIX FILE TAG")]
     tag: Option<String>,
+
+    #[arg(short, long, value_name = "SSH HOST")]
+    ssh_host: Option<String>,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    home::init()?;
     let home_dir = std::env::var("HOME").unwrap_or_else(|_| "".to_string());
     let cli = Cli::parse();
+    match cli.ssh_host {
+        Some(ssh_host) => {
+            let path = cli.path;
+            let script = format!(
+                r#"code {} {} -n"#,
+                format!("--remote ssh-remote+ssh://{}", ssh_host),
+                path.display()
+            );
+            println!("Executing: {}", script);
+            let output = Command::new("sh")
+                .arg("-c")
+                .arg(script)
+                .stdout(Stdio::inherit())
+                .stderr(Stdio::inherit())
+                .output()?;
+            if output.status.success() {
+                println!("nix-code command executed successfully");
+            } else {
+                eprintln!(
+                    "nix-code command failed with exit status: {:?}",
+                    output.status
+                );
+            }
+            return Ok(());
+        }
+        None => {}
+    }
+
+    home::init()?;
 
     let work_dir = cli.path;
     let nix_file = cli.file;
